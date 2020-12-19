@@ -1,0 +1,34 @@
+\usepackage[utf8]{inputenc}
+\usepackage[L7x]{fontenc}
+\usepackage[lithuanian]{babel}
+\usepackage{float}
+\usepackage{setspace}
+\onehalfspacing
+
+\usepackage{graphicx}
+\usepackage{booktabs}
+
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,
+linkcolor=black,
+filecolor=black,
+urlcolor=black,
+citecolor=red}
+
+\usepackage{float}
+\let\origfigure\figure
+\let\endorigfigure\endfigure
+\renewenvironment{figure}[1][2] {
+    \expandafter\origfigure\expandafter[H]
+} {
+    \endorigfigure
+}
+
+\usepackage{titling}
+
+\pretitle{%
+  \begin{center}
+  \LARGE
+  \includegraphics[width=4cm,height=6cm]{logo.png}\\[\bigskipamount]
+}
+\posttitle{\end{center}}

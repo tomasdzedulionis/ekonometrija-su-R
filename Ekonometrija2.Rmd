@@ -1,0 +1,685 @@
+---
+title: "Ekonometrija (II) su R."
+author: | 
+  | Tomas Dzedulionis, 
+  | III kursas, Ekonominė analizė
+  | Vilniaus universitetas 
+  | Ekonomikos ir verslo administravimo fakultetas
+date: '2020m.'
+output:
+  pdf_document:
+    fig_caption: yes
+    fig_width: 6
+    fig_height: 3
+    number_sections: true
+    toc: true 
+    toc_depth: 3
+    highlight: tango
+    includes:
+      in_header: header_lt_text.txt
+geometry: "left=3cm,right=3cm,top=2cm,bottom=2cm"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+if(!require("tidyverse")) install.packages("tidyverse"); library("tidyverse")
+if(!require("psych")) install.packages("psych"); library("psych")
+if(!require("fpp2")) install.packages("fpp2"); library("fpp2")
+if(!require("mFilter")) install.packages("mFilter"); library("mFilter")
+if(!require("fUnitRoots")) install.packages("fUnitRoots"); library("fUnitRoots")
+if(!require("stats")) install.packages("stats"); library("stats")
+if(!require("tseries")) install.packages("tseries"); library("tseries")
+```
+
+\pagebreak
+# Įvadas
+
+Ši mokomoji medžiaga skirta ekonomikos studentams, kurie studijuoja ekonometriją II ir nori plėsti R programavimo žinias bei pasitelkti **R** programą mokomojo dalyko darbams atlikti. Medžiagoje apžvelgiamos šios temos:  
+
+* Klasikinis laiko eilutės išskaidymas
+* Laiko eilutės eksponentinis glodinimas ir filtrai
+* ARIMA modeliai
+* VAR modeliai
+* Panelinių duomenų modeliai.  
+
+Mokomoji medžiaga/konspektas rašytas mokymosi tikslais.
+
+
+# Klasikinis laiko eilutės išskaidymas
+## Laiko eilutės samprata
+**Laiko eilutė** *(laiko seka)* –reiškinio periodiškų stebėjimų visuma, kurių duomenys tai periodo metu fiksuoti stebėjimų dydžiai arba stebimų dydžių suma.  
+Laiko eilutės gali būti suformuotos iš įvairaus dažnumo, tačiau vienodo periodiškumo duomenų: valandinių, kasdienių, savaitinių, mėnesinių, metinių ir pan.  
+Norint duomenims suteikti laiko eilutės formą naudojame komandą `ts(...)`, o skliaustų viduje nurodome duomenis `data=...`, pradžios reikšmę (datą) `start=...`, pabaigą `end=...` ir stebejimų dažnį `frequency=...` (pavyzdžiui ketvirtiniai duomenys `frequency=4`).  
+
+## Duomenų importas ir vertimas laiko eilute
+Duomenims naudosime paskaitoje suteiktus NETO darbo užmokesčio ūkio šakose duomenis (2008K1-2020K2), jie įkelti į Google Drive platformą lengvesniam pasiekiamumui iš skirtingų kompiuterių.  
+
+
+**Importavimas ir duomenų valymas**
+```{r, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+# Nurodome nuorodą į duomenis
+url <- "https://drive.google.com/uc?export=download&id=1IGFYeF3E58_g9Ak5sd5BGkt1jgDBfpUq"
+# Importuojame duomenis
+df <- read.delim(url, header=TRUE, sep=";", na.strings=c("", "NA"), encoding = "UTF-8")
+# Pasileidžiame paketą duomenų valymui
+if(!require("tidyverse")) install.packages("tidyverse"); library("tidyverse")
+# Valome duomenis (išmetame X stulpelį, panaikiname tuščias reikšmes (NA), pervadiname stulpelį)
+df <- df%>% select(-"X") %>% na.omit() %>% rename(Metai="X.U.FEFF.")
+# Renkamės nagrinėjamą sritį, mūsų atveju Finansinė ir draudimo veikla ("K")
+df <- select(df, 1,"K")
+# Verčiame skaičius iš character vektoriaus į numeric vektorių
+df$K <- as.numeric(sub(",", ".", df$K, fixed=T))
+# Paverčiame duomenis į laiko eilutės formatą
+data <- ts(df$K, frequency = 4, start = c(2008, 1))
+```
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+data
+```
+
+\pagebreak
+## Laiko eilutės išskaidymas  
+
+### Multiplikatyviu būdu
+
+Skaidome laiko eilutę multiplikatyviu būdu.
+```{r, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+data_multi <- decompose(data, type="multiplicative")
+## Sezoniškumo indeksai slėpsis šiame objekte "data_multi"
+```
+Sezoniškumo indeksus galime išsitraukti panaudoję komandą  
+`data_multi$seasonal` 
+```{r fig.height = 5, fig.width = 6, fig.align = "center"}
+plot(data_multi)
+```
+
+\pagebreak
+
+### Adityviu būdu
+
+Skaidome laiko eilutę adityviu būdu.
+```{r, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+data_adityv <- decompose(data, type="additive")
+## Sezoniškumo indeksai slėpsis šiame objekte "data_adityv"
+```
+Sezoniškumo indeksus galime išsitraukti panaudoję komandą  
+`data_adityv$seasonal` 
+```{r fig.height = 5, fig.width = 6, fig.align = "center"}
+plot(data_adityv)
+```
+
+
+\pagebreak 
+
+### Desezonizavimas
+
+Norint desezonizuoti laiko eilutę, reikia iš jos atimti sezoniškumo indeksus.  
+Pavyzdys su adityviu išskaidymu:
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+data - data_adityv$seasonal
+```
+
+## Aprašomosios statistikos
+
+Aprašomosios statistikos gali būti išgaunomas keliais būdais:  
+
+1. Naudojant komandą `summary()`
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+summary(data)
+```
+2. Naudojant paketą `psych`
+```{r, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+if(!require("psych")) install.packages("psych"); library("psych")
+describe(data)
+```
+
+
+\pagebreak
+# Eksponentinis glodinimas 
+Įvairiems glodinimo būdams naudosime paketą `fpp2`.
+```{r, eval=FALSE, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+if(!require("fpp2")) install.packages("fpp2"); library("fpp2")
+```
+
+## Paprastas eksponentinis glodinimas (SES)
+Naudosime komandą `ses()`. Optimalų alpha koeficientą parinks pati programa.
+```{r, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+# alpha=NULL reiškia, jog komanda parinks optimalų alpha koeficientą
+# h=4 nurodo suglodinti kitiems 4-iems periodams
+ses.data <- ses(data, alpha = NULL, h=4)
+```
+```{r fig.height = 3, fig.width = 6, fig.align = "center", warning=FALSE, message=FALSE}
+autoplot(ses.data, xlab="Metai", ylab="Atlyginimas")+
+  ggtitle("Paprastas eksponentinis glodinimas (SES)")+
+  scale_x_continuous(breaks = seq(2008,2020,2))
+```
+Modelio paklaidas išgausime komanda `accuracy()`
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+accuracy(ses.data)
+```
+
+\pagebreak
+Modelio apibendrinta informacija išgaunama komanda `summary()`.
+Matome, kad komanda parinko alpha koeficientą lygų 0.6758.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+summary(ses.data)
+```
+
+Paprastasis eksponentinis glodinimas netinkamas šiems duomenims, kadangi duomenys turi stipriai išreikštą trendą ir sezoniškumą.
+
+## Dvigubas eksponentinis glodinimas (Holt glodinimas) 
+Šiam glodinimo būdui naudojama komanda `holt()`. Optimalius alpha ir beta koeficientus parinks pati programa.
+```{r, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+holt.data <- holt(data, h = 4, alpha=NULL, beta = NULL)
+```
+```{r fig.height = 3, fig.width = 6, fig.align = "center", warning=FALSE, message=FALSE}
+autoplot(holt.data, xlab="Metai", ylab="Atlyginimas")+
+  ggtitle("Dvigubo eksponentinio glodinimo prognozė")+
+  scale_x_continuous(breaks = seq(2008,2020,2))
+```
+Paklaidos
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+accuracy(holt.data)
+```
+Apibendrinta informacija. Programa parinko alpha=0.0707, beta=0.0707.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+summary(holt.data) ### Alfa parinkta 0.9167, Beta 0.0001
+```
+Glodinimo būdas netinka šiems duomenims, kadangi duomenys turi sezoniškumą.
+
+## Holt-Winters be sezoniškumo komponentės.
+
+Naudosime komandą `ets()`.
+`model=...` parametras: Paklaidos - "Z" (programa nustato multiplikatyvios ar adityvios), 
+Trendas - "Z" (programa nustato multiplikatyvi ar adityvi), Sezoniškumas - "N".
+```{r, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+data.hw <- ets(data, model = "ZZN")
+```
+```{r fig.height = 3, fig.width = 6, fig.align = "center", warning=FALSE, message=FALSE}
+autoplot(forecast(data.hw,4, xlab="Metai", ylab="Atlyginimas"))+
+  ggtitle("Holt-Winters be sezoniškumo komponentės")+
+  scale_x_continuous(breaks = seq(2008,2020,2))
+```
+
+\pagebreak
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+summary(forecast(data.hw,4))
+accuracy(data.hw)
+```
+
+\pagebreak
+## Holt_Winters su adityviu sezoniškumu.
+
+Komanda ta pati, tiesiog keičiame `model=` parametrus. Sezoniškumas - "A".
+```{r, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+data.hwadditive <- ets(data, model = "ZZA")
+```
+```{r fig.height = 3, fig.width = 6, fig.align = "center", warning=FALSE, message=FALSE}
+autoplot(forecast(data.hwadditive,4, xlab="Metai", ylab="Atlyginimas"))+
+  ggtitle("Holt Winters su adityviu sezoniškumu")+
+  scale_x_continuous(breaks = seq(2008,2020,2))
+```
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+summary(forecast(data.hwadditive,4))
+accuracy(data.hwadditive)
+```
+
+## Holt_Winters su multiplikatyviu sezoniškumu.
+Komanda ta pati, tiesiog keičiame `model=` parametrus. Sezoniškumas - "M".
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+data.hwmultiplicative <- ets(data, model = "ZZM")
+```
+```{r fig.height = 3, fig.width = 6, fig.align = "center", warning=FALSE, message=FALSE}
+autoplot(forecast(data.hwmultiplicative,4, xlab="Metai", ylab="Atlyginimas"))+
+  ggtitle("Holt Winters su multiplikatyviu sezoniškumu")+
+  scale_x_continuous(breaks = seq(2008,2020,2))
+```
+
+\pagebreak
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+summary(forecast(data.hwmultiplicative,4))
+accuracy(data.hwmultiplicative)
+```
+
+\pagebreak
+## Hodrick-Prescott filtras
+Naudosime paketą `mFilter` ir komandą `hpfilter()`
+```{r, eval=FALSE, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+if(!require("mFilter")) install.packages("mFilter"); library("mFilter")
+```
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+hp <- hpfilter(data, type="lambda", freq=1600)
+```
+```{r fig.height = 4, fig.width = 6, fig.align = "center", warning=FALSE, message=FALSE}
+plot(hp)
+```
+
+\pagebreak
+# ARIMA
+## Stacionarumo tikrinimas
+### Grafinė analizė
+Įvertinsime duomenų stacionarumą žvigtelėję į laiko eilutės grafiką.  
+Matome, kad duomenys nėra stacionarūs - jie turi aiškiai išreikštą trendą.
+```{r fig.height = 4, fig.width = 6, fig.align = "center", warning=FALSE, message=FALSE}
+plot(data)
+```
+Taip pat galime pažiūrėti į autokoreliacijos ir dalinės autokoreliacijos grafikus.  
+Matome, jog autokoreliacijos funkcija laipsniškai mažėja, kas indikuoja apie pirmo lago autokoreliacija. Tą patvirtina dalinės autokoreliacijos grafikas, su reikšminga pirmo laikotarpio autokoreliacija.
+\pagebreak
+```{r fig.height = 4, fig.width = 6, fig.align = "center", warning=FALSE, message=FALSE}
+acf(data)
+pacf(data)
+```
+
+### Vienetinės šaknies testai
+$H0:$ Kintamasis nėra stacionarus ir turi vienetinę šaknį  
+$H1:$ Kintamasis yra stacionarus ir neturi vienetinės šaknies.  
+Naudosime `fUnitRoots` paketą ir komandą `adfTest()`, bei paketą `tseries` ir komandą `adf.test()`.
+```{r, eval=FALSE, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+if(!require("fUnitRoots")) install.packages("fUnitRoots"); library("fUnitRoots")
+if(!require("tseries")) install.packages("tseries"); library("tseries")
+```
+Norėdami atlikti **Augmented Dickey-Fuller** testą su `adfTest()` komanda, turime nurodyti pagrindinius parametrus.  
+Lagų skaičius nurodome `lags=...` parametro pagalba, jei nenurodysime, pagal nutylėjimą bus paimtas 1 lagas. Testo tipą pasirenkame `type=...` parametro pagalba:  
+1. `type="nc"`, vienetinės šaknies testui be konstantos ir trendo.  
+2. `type="c"`, vienetinės šaknies testas su konstanta ir be trendo.  
+3. `type="ct"`, vienetinės šaknies testas su konstanta ir su trendu.  
+Tuo tarpu `adf.test()` pati parenka lagus bei atlieka testą su konstanta ir trendu.
+Patikrinkime pradinius duomenis.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+adfTest(data, type="nc")
+adfTest(data, type="c")
+adfTest(data, type="ct")
+adf.test(data)
+```
+Matome, jog visų testų p reikšmės > 0.05, kas rodo, jog negalime atmesti $H0$, o duomenys nėra stacionarūs.
+
+## Stacionarizavimas
+
+Duomenis stacionarizuoti galime dviem būdais - logaritmuojant (`log(...)`) ir/arba diferencijuojat (`diff=(...)`) duomenis.
+Šiuo atveju duomenis desezonizuosime, tuomet panaikinsime trendą duomenis diferencijuodami ir pereisime prie pirmųjų skirtumų analizės.
+
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+diff(data-data_adityv$seasonal)
+data2 <- diff(data-data_adityv$seasonal)
+```
+```{r fig.height = 4, fig.width = 6, fig.align = "center", warning=FALSE, message=FALSE}
+plot(data2)
+```
+
+Iš grafiko matome, jog diferencijuoti duomenys atrodo stacionarūs.  
+Patikrinkime tai vienetinės šaknies testu.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+adfTest(data2, type="nc")
+adfTest(data2, type="c")
+adfTest(data2, type="ct")
+adf.test(data2)
+```
+Matome, jog desezonizavus ir diferencijavus duomenis jie tapo stacionarūs (p reikšmės <0.05, todėl atmetame $H0$).
+
+## ARIMA modelio sudarymas
+Arima modelio parinkimas R programoje yra labai paprastas.
+Viskas vyksta komandos `auto.arima` pagalba, kuri "prasuka" skirtingos eilės arima modelius, kol randa geriausią pagal Akaike informacijos kriterijų.
+
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+arima <- auto.arima(data2, ic="aic")
+summary(arima)
+```
+Matome, jog programa parinko SARIMA (ARIMA(3,1,1)(1,0,0)) modelį.  
+Dabar reikia atlikti Ljung-Box testą iš paketo `stats`, kad įsitikintume, jog paklaidos yra baltas triukšmas (ar nėra autokoreliacijos).  
+$H0:$ Paklaidos yra baltas triukšmas.  
+$H1:$ Paklaidos nėra baltas triukštmas.
+```{r, eval=FALSE, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+if(!require("stats")) install.packages("stats"); library("stats")
+```
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+Box.test(residuals(arima), type="Ljung-Box", lag=12)
+```
+\pagebreak
+```{r, eval=FALSE, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+checkresiduals(arima)
+```
+```{r fig.height = 4, fig.width = 6, fig.align = "center",echo=FALSE, message=FALSE, results='hide'}
+checkresiduals(arima)
+```
+Matome, jog Ljung-Box testo p reikšmė >0.05, todėl negalime atmesti nulinės hipotezės, o tai reiškia, kad paklaidos yra baltas triukšmas beigi modelis yra tinkamas. Taip pat galime patikrinti atvirkštines modelio šaknis.
+\pagebreak
+```{r fig.height = 4, fig.width = 6, fig.align = "center", warning=FALSE, message=FALSE}
+autoplot(arima)
+```
+
+## Prognozavimas
+Prognozuosime artimiausiems 4-iems ketvirčiams naudodami komandą `forecast()`.  
+Būtina atsiminti, kad pateikiamos reikšmės yra atlyginimo augimo skirtumai (kadangi duomenis diferencijavome, kai juos stacionarizavome) ir iš jų atimtos sezoninės reikšmės.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+prognoze <- forecast(arima, 4)
+prognoze
+```
+```{r fig.height = 4, fig.width = 6, fig.align = "center", warning=FALSE, message=FALSE}
+autoplot(forecast(arima,4))
+```
+Galiausiai reikia pridėti sezonines vertes ir gauti tikruosius prognozinius įverčius.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+# Kadangi prognozavome paskutinių metų 3,4 ketvirčius ir naujų metų 1 ir 2 ketvirčius
+# Reikia sezoniškumo indeksų: Qtr3, Qtr4, Qtr1, Qtr2
+# Sudedame prognozuotus įverčius ir pridedame kiekvieno ketvirčio sezoniškumo indeksus
+forecast <- as.numeric(prognoze$mean) + as.numeric(diff(data_adityv$seasonal[2:6])) 
+forecast <- ts(forecast, start=c(2020,3), frequency = 4)
+forecast
+```
+
+# VAR
+Var modelių sudarymui naudosime paskaitoje pateiktus MMA, TUI, dirbančiųjų skaičiaus ir darbo užmokesčio duomenis. Jie įkelti į Google Drive platformą dėl patogesnio priėjimo.  
+Įsikeliame duomenis:
+```{r, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+url <-"https://drive.google.com/uc?export=download&id=1R6DkKwwGC3mcPL8YhRBD1ARnyKdVnsjR"
+df <- read.csv(url, header=TRUE, sep=";")
+df$Uzmokestis<- as.numeric(sub(",", ".", df$Uzmokestis, fixed=T))
+df$Dirbantys<- as.numeric(sub(",", ".", df$Dirbantys, fixed=T))
+df$TUI<- as.numeric(sub(",", ".", df$TUI, fixed=T))
+df$MMA<- as.numeric(sub(",", ".", df$MMA, fixed=T))
+uzmokestis <- ts(df$Uzmokestis, 
+                 start=c(2008,1),
+                 end=c(2020,2),
+                 frequency = 4)
+dirbantys <-ts(df$Dirbantys, 
+               start=c(2008,1),
+               end=c(2020,2),
+               frequency = 4)
+tui <- ts(df$TUI, 
+          start=c(2008,1),
+          end=c(2020,2),
+          frequency = 4)
+mma <- ts(df$MMA, 
+          start=c(2008,1),
+          end=c(2020,2),
+          frequency = 4)
+```
+
+## Pirmoji grafinė analizė
+
+```{r fig.height = 4, fig.width = 6, fig.align = "center", warning=FALSE, message=FALSE}
+plot.ts(uzmokestis)
+plot.ts(dirbantys)
+plot.ts(tui)
+plot.ts(mma)
+```
+
+## Stacionarizavimas
+
+Patikrinkime stacionarumą.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+adf.test(uzmokestis, k=0)
+adf.test(dirbantys, k=0)
+adf.test(mma,k=0)
+adf.test(tui, k=0)
+```
+Matome, jog ne visos laiko eilutės stacionarios, todėl diferencijuojame laiko eilutes ir kartojame vienetinės šaknies testą.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+uzmokestis <- diff(uzmokestis)
+mma <- diff(mma)
+dirbantys <- diff(dirbantys)
+tui <- diff(tui)
+adf.test(uzmokestis, k=0)
+adf.test(dirbantys, k=0)
+adf.test(mma,k=0)
+adf.test(tui, k=0)
+```
+## VAR Modelio sudarymas
+Laiko eilutės stacionarios, galime pereiti prie VAR sudarymo.  
+Visų pirma reikia susidaryti duomenų matrica.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+endogeniniai <- cbind(uzmokestis, dirbantys)
+colnames(endogeniniai) <- c("uzmokestis", "dirbantys")
+egzogeniniai <- cbind(mma, tui)
+colnames(egzogeniniai) <- c("mma", "tui")
+```
+Dabar `vars` paketo `VARselect()` komanda, remiantis Akaike informacijos kriterijumi, galėsime išsiaiškinti, kelintos eilės VAR modelį sudaryti.
+```{r, eval=TRUE, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+if(!require("vars")) install.packages("vars"); library("vars")
+```
+
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+info <- VARselect(endogeniniai, lag.max = 4, exogen = egzogeniniai)
+info$selection
+```
+Matome, jog komanda siūlo sudaryti 4-os eilės VAR modelį.  
+Sudarykime modelį.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+Model1 <- VAR(endogeniniai, p = 4, ic="AIC", exog= egzogeniniai)
+summary(Model1)
+```
+Patikrinkime apskaičiuoto modelio AR charakteringo polinomo atvirkštines šaknis ir atlikime Jarque Bera  testą paklaidų normalumui nustatyti.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+roots(Model1, modulus = TRUE)
+normality.test(Model1, multivariate.only = TRUE)
+```
+
+Matome, jog nei viena polinomo atvirkštinė šaknis nėra didesnė už 1-ą, o Jarque-Bera testo p reikšmė = 0.05894 vos vos didesnė už 0.05, kas leidžia teigti (su 90proc. pasitikėjimo lygiu), jog paklaidos yra normalios.
+
+## Prognozė
+Prognozuosime 4-iems ateinantiems laikotarpiams (4-iems ketvirčiams). Turime sukurti egzogeninių reikšmių prognozuojamiems laikotarpiams matricą. Jei nežinome, kokios kintamųjų reikšmės bus ateinančiuose laikotarpiuose, tuomet įrašome 0. Ir galiausiai atliekame prognozę.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+# Kuriame egzogeninių kintamųjų matricą ateičiai
+mma2<-c(0,0,0,0)
+tui2<-c(0,0,0,0)
+egzogeniniai2 <- cbind(mma2, tui2)
+colnames(egzogeniniai2) <- c("mma", "tui")
+# Prognozuojame
+predict(Model1, n.ahead = 4, ci = 0.95, dumvar = egzogeniniai2)
+```
+
+## Granger priežastingumo testai
+
+Atliekame Granger priežastingumo testus.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+Grangeruzmokestis<- causality(Model1, cause = "uzmokestis")
+Grangerdirbantys <- causality(Model1, cause = "dirbantys")
+Grangeruzmokestis
+Grangerdirbantys
+```
+
+## Reakcija į impulsus
+
+```{r fig.height = 4, fig.width = 6, fig.align = "center", warning=FALSE, message=FALSE}
+irf1 <- irf(Model1, impulse = "uzmokestis", response = "uzmokestis", n.ahead = 10, boot = TRUE)
+plot(irf1, ylab = "užmokestis", main = "užmokesčio impulsas užmokesčiui")
+irf2 <- irf(Model1, impulse = "dirbantys", response = "dirbantys", n.ahead = 10, boot = TRUE)
+plot(irf2, ylab = "dirbantys", main = "dirbančių impulsas dirbantiems")
+irf3 <- irf(Model1, impulse = "uzmokestis", response = "dirbantys", n.ahead = 10, boot = TRUE)
+plot(irf3, ylab = "dirbantys", main = "užmokesčio impulsas dirbantiems")
+irf4 <- irf(Model1, impulse = "dirbantys", response = "uzmokestis", n.ahead = 10, boot = TRUE)
+plot(irf4, ylab = "uzmokestis", main = "dirbančių impulsas užmokesčiu")
+```
+
+# Panelinių duomenų modeliai
+
+Panelinių duomenų modeliui nagrinėti pasitelksime Lietuvos statistikos departamento duomenis: nusikalstamumo lygis, išsilavinimo lygis ir BVP vienam gyventojui.  
+Modelio tikslas - nustatyti ar nusikalstumo lygiui Lietuvos regionuose turį įtakos išsilavinimo, nedarbo lygis ir BVP vienam gyventojui. Jei įtaka yra, kokia ji.  
+Duomenys yra 2005 - 2019metų iš 10 Lietuvos regionų.  
+Importuokime duomenis, kurie įkelti į Google Drive platformą dėl patogesnio prieinamumo iš skirtingų kompiuterių. Tuo pačiu persiskaičiuosime išsilavinusių žmonių skaičių iš absoliučių reikšmių į procentus nuo bendro išsilavinusių skaičiaus
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+data <- read.delim("https://drive.google.com/uc?export=download&id=189Gq3W33BjoFkeDmlEcOCLjR4wAtC6-f", sep=";")
+data <- dplyr::filter(data, Administracine.teritorija !="Lietuvos Respublika",
+                     Administracine.teritorija !="Sostin?s regionas",
+                     Administracine.teritorija != "Vidurio ir vakar? Lietuvos regionas") %>%
+        mutate(Vidutinis = Vidutinis/Viso.issilavinusiu* 100,
+               Aukstas= Aukstas/Viso.issilavinusiu* 100,
+               Zemas = Zemas/Viso.issilavinusiu* 100) %>%
+        rename( "teritorija" =Administracine.teritorija)
+```
+\pagebreak
+Paverskime duomenis į panelinių duomenų formatą. Tam prireiks `plm` paketo.
+
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+if(!require("plm")) install.packages("plm"); library("plm")
+# Paverčiame į panelinių duomenų formatą
+data.p <- pdata.frame(data,index=c("teritorija", "Laikotarpis"))
+# Verčiame praleistas "NA" reikšmes į 0
+data.p[is.na(data.p)] <- 0
+# Suformatuojame, kad laikotarpis būtų datos formato. Prireiks paketo "lubridate"
+if(!require("lubridate")) install.packages("lubridate"); library("lubridate")
+data.p$Laikotarpis <- year(as.Date(data.p$Laikotarpis, format = "%Y"))
+```
+
+## Grafinė analizė
+Pažiūrėkime, kaip elgiasi duomenys. Kokios tendencijos bei ar duomenys yra stacionarūs.  
+Duomenų atvaizdavimui naudosime `ggplot()` paketą.
+
+```{r fig.height = 4, fig.width = 6, fig.align = "center", warning=FALSE, message=FALSE}
+ggplot(data.p, aes(Laikotarpis, Nusikaltimai, group=1)) +
+        geom_line()+
+        facet_wrap(~ teritorija)
+
+ggplot(data.p, aes(Laikotarpis, Nedarbas, group=1)) +
+        geom_line()+
+        facet_wrap(~ teritorija)
+
+ggplot(data.p, aes(Laikotarpis, Zemas, group=1)) +
+        geom_line()+
+        facet_wrap(~ teritorija)
+
+ggplot(data.p, aes(Laikotarpis, Vidutinis, group=1)) +
+        geom_line()+
+        facet_wrap(~ teritorija)
+
+ggplot(data.p, aes(Laikotarpis, Aukstas, group=1)) +
+        geom_line()+
+        facet_wrap(~ teritorija)
+```
+
+## Stacionarumo tikrinimas [1]
+Matome, kad duomenys, išskyrus nedarbą, nėra stacionarūs, kadangi p reikšmės > 0.05.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+adf.test(data.p$Nedarbas)
+adf.test(data.p$Nusikaltimai)
+adf.test(data.p$Zemas)
+adf.test(data.p$Aukstas)
+adf.test(data.p$Vidutinis)
+adf.test(data.p$BVP)
+```
+
+
+## Duomenų stacionarizavimas.
+Diferencijuojame laiko eilutes, tam, kad gauti pokyčius. Nusikaltimų duomenis logaritmuojame ir differencijuojame, taip gaudami procentinius augimo pokyčius.
+```{r, echo=TRUE, warning=FALSE}
+data.p$Nusikaltimai <- log(data.p$Nusikaltimai)
+data.p$Nusikaltimai <- diff(data.p$Nusikaltimai)
+data.p$Zemas <- diff(data.p$Zemas)
+data.p$Vidutinis <- diff(data.p$Vidutinis)
+data.p$Aukstas <- diff(data.p$Aukstas)
+data.p$BVP <- diff(data.p$BVP)
+data.p[is.na(data.p)] <- 0
+```
+
+## Stacionarumo tikrinimas [2]
+Matome, jog duomenys vienetinės šaknies nebeturi - tapo stacionarūs. p reikšmės < 0.05.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+adf.test(data.p$Nedarbas)
+adf.test(data.p$Nusikaltimai)
+adf.test(data.p$Zemas)
+adf.test(data.p$Aukstas)
+adf.test(data.p$Vidutinis)
+adf.test(data.p$BVP)
+```
+
+## Grafinė analizė [2]
+```{r fig.height = 4, fig.width = 6, fig.align = "center", warning=FALSE, message=FALSE}
+ggplot(data.p, aes(Laikotarpis, Nusikaltimai, group=1)) +
+        geom_line()+
+        facet_wrap(~ teritorija)
+
+ggplot(data.p, aes(Laikotarpis, Nedarbas, group=1)) +
+        geom_line()+
+        facet_wrap(~ teritorija)
+
+ggplot(data.p, aes(Laikotarpis, Zemas, group=1)) +
+        geom_line()+
+        facet_wrap(~ teritorija)
+
+ggplot(data.p, aes(Laikotarpis, Vidutinis, group=1)) +
+        geom_line()+
+        facet_wrap(~ teritorija)
+
+ggplot(data.p, aes(Laikotarpis, Aukstas, group=1)) +
+        geom_line()+
+        facet_wrap(~ teritorija)
+```
+
+## Pastovių konstantų modelis.
+Sudarėme pastovių konstantų modelį su išraiška:
+$$log(Nusikaltimai) = \alpha + \beta1 Nedarbas + \beta2Zemas + \beta3Vidutinis + \beta4Aukstas +  \beta5BVP$$
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+ols<- lm(Nusikaltimai ~ Nedarbas +  Zemas + Vidutinis + Aukstas + BVP, data=data.p)
+summary(ols)
+```
+
+Matome, kad BVP komponentė nėra statistiškai reikšminga, teks jos atsisakyti.
+Taip pat panaikinome Aukšto išsilavinimo žmonių dalį tam, kad galėtume vertinti kitų kintamųjų poveikį bazinio kintamojo atžvilgiu. Matome, jog visi kintamieji yra statistiškai reikšmingi.
+Sudarome naują modelį:
+$$log(Nusikaltimai) = \alpha + \beta1 Nedarbas + \beta2Zemas + \beta3Vidutinis$$
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+ols<- lm(Nusikaltimai ~ Nedarbas +  Zemas + Vidutinis, data=data.p)
+summary(ols)
+```
+  Turime patikrinti ar nėra autokoreliacijos naudodami `durbinWatsonTest()` komandą iš paketo `car`:
+```{r, eval=TRUE, echo=TRUE, warning=FALSE, message=FALSE, collapse=TRUE}
+if(!require("car")) install.packages("car"); library("car")
+```
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+durbinWatsonTest(ols)
+checkresiduals(ols$residuals)
+```
+Matome, jog Durbin-Watson testas nerodo reikšmingos autokoreliacijos (p>0.05, neatmetam H0). Paklaidų grafike stebime autokoreliaciją 7-tame lage, tačiau toks lagas yra per daug tolimas, kad būtų reikšmingas, kadangi duomenys yra metiniai. Paklaidos pasiskirsčiusios normaliuoju skirstiniu.
+**Galutinis modelis**
+$$log(Nusikaltimai) = -0.082605  + 0.006049*Nedarbas + 0.017063*Zemas + 0.015339*Vidutinis$$
+**Interpretacija** - Koeficientas alpha=-0.082605 rodo, koks būtų nusikalstamumo augimo procentinis pokytis, jei jo neveiktų nei nedarbo lygis, nei žemo ar vidutinio išsilavinimo žmonių skaičius. Koeficientas prie Nedarbo (*0.006049*) rodo, jog nedarbo lygiui išaugus 1proc., nusikalstamumo lygio procentinis pokytis padidėtų 0.6049% (100% * Beta1). Žemo išsilavinimo (*Beta2 = 0.017063*) žmonių padidėjimas, kai aukšto išsilavinimo žmonių skaičius išlieka nepakitęs, iššauktų 1.7063% nusikalstamumo augimo padidėjimą. Tuo tarpu Vidutinio išsilavinimo (*Beta3 = 0.015339*)žmonių skaičiaus padidėjimas 1% nusikalstamumo augimą paspartintų 1.5339%.
+
+
+## Fiksuotų efektų modelis
+
+$$log(Nusikaltimai) = \alpha1 + \beta1 Nedarbas + \alpha2 + \beta2Zemas + \alpha3 + \beta3Vidutinis$$
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+fixedeff <- plm(data.p$Nusikaltimai~data.p$Nedarbas+data.p$Zemas+data.p$Vidutinis,data=data.p,model="within")
+summary(fixedeff)
+## Fiksuotų efektų konstantos kiekvienam regionui
+fixef(fixedeff)
+checkresiduals(fixedeff$residuals)
+```
+
+Visos komponentės statistiškai reikšmingos, atlikę f testą, patikrinkime, kuris modelis - pastovių konstantų ar fiksuotų efektų - yra geresnis.  
+Kadangi p>0.05, H0 neatmetame. Pastovios konstantos modelis yra geresnis.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+
+pFtest(fixedeff,ols) 
+```
+
+
+
+## Atsitiktinių efektų modelis
+
+$$log(Nusikaltimai) = \alpha + \beta1 Nedarbas + \beta2Zemas + \beta3Vidutinis + (u + v)$$
+
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+randomeff <- plm(data.p$Nusikaltimai~data.p$Nedarbas+data.p$Zemas+data.p$Vidutinis,data=data.p,model="random")
+summary(randomeff)
+```
+
+Visas komponentes ir vėl gauname statistiškai reikšmingas. Pasinaudodami Hausman testu tikriname, kuris modelis - atsitiktinių efektų ar fiksuotų efektų - yra geresnis.
+Gauname p>0.05, todėl H0 neatmetame. Tai reiškia, kad tinkamesnis yra atsitiktinių efektų modelis.
+```{r, echo=TRUE, warning=FALSE, message=TRUE, collapse=TRUE}
+phtest(fixedeff,randomeff) ##Neatmetam h0, todel atsitiktiniu dydziu geresnis.
+```
+
+## Galutinis modelis
+
+Palyginus atsitiktinių efektų determinacijos koeficientą (0.1) ir pastovios konstantos modelio determinacijos koeficientą (0.1) matome, kad jie yra vienodi. Tai reiškia, kad abu modeliai yra geresni už fiksuotų efektų modelį ir abu paaiškina vienodą dalį duomenų pokyčių. Paprastumo dėlei, kaip galutinį modelį renkamės patobulintą pastovių konstantų modelį:
+$$log(Nusikaltimai) = -0.082605  + 0.006049*Nedarbas + 0.017063*Zemas + 0.015339*Vidutinis$$
+
+
+
+
+
+
+
